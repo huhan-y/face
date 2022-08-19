@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta
+      name="viewport"
+      content="initial-scale=1, maximum-scale=3, minimum-scale=1, user-scalable=no"
+    />
+    <script type="text/javascript">
+      let start, upload;
+      window.onload = function () {
+        let video = document.getElementById("live");
+        let canvas = document.getElementById("canvas");
+        let canvas2 = document.getElementById("canvas2");
+        let ctx = canvas.getContext("2d");
+        let ctx2 = canvas2.getContext("2d");
+        let apiKey = "2c60c3e4-1657-4598-b280-4b89b177c34b";
+        let uploadApiKey = "0777f598-b5da-4731-9eac-50db6fd46483";
+        let input = document.getElementById("input");
+        let fd;
+
+        start = function () {
+          navigator.mediaDevices
+            .getUserMedia({
+              video: { width: { ideal: 450 }, height: { ideal: 376 } },
+            })
+            .then(function (stream) {
+              try {
+                video.srcObject = stream;
+                video.play();
+                document.addEventListener("next_frame", draw);
+                const evt = new Event("next_frame", {
+                  bubbles: true,
+                  cancelable: false,
+                });
+                document.dispatchEvent(evt);
+              } catch (err) {
+                alert(err);
+              }
+            });
+        };
+
+        function draw() {
+          ctx.drawImage(video, 0, 0, 376, 450);
+          canvas.toBlob(
+            function (blob) {
+              try {
+                blob.name = "blob.jpeg";
+                fd = new FormData();
+                fd.append("file", blob, "blob.jpeg");
+
+                fetch("http://192.168.12.9:8000/api/v1/detection/detect", {
+                  method: "POST",
+                  headers: {
+                    "x-api-key": apiKey,
+                  },
+                  body: fd,
+                })
+                  .then((r) => r.json())
+                  .then(function (data) {
+                    try {
+                      const evt = new Event("next_frame", {
+                        bubbles: true,
+                        cancelable: false,
+                      });
+                      document.dispatchEvent(evt);
+                      ctx2.clearRect(0, 0, 376, 450);
+                      ctx2.drawImage(video, 0, 0, 376, 450);
+                      if (!data.result) {
+                        return;
+                      }
+                      let box = data.result[0].box;
+                      ctx2.lineWidth = 3;
+                      ctx2.strokeStyle = "green";
+                      ctx2.strokeRect(
+                        box.x_min,
+                        box.y_min,
+                        box.x_max - box.x_min,
+                        box.y_max - box.y_min
+                      );
+                    } catch (err) {
+                      // alert(err);
+                    }
+                  });
+              } catch (err) {
+                alert(err);
+              }
+            },
+            "image/jpeg",
+            0.95
+          );
+        }
+
+        upload = function () {
+          let name = input.value;
+          if (!name) return alert("请输入姓名");
+          fetch(
+            "http://192.168.12.9:8000/api/v1/recognition/faces?subject=" + name,
+            {
+              method: "POST",
+              headers: {
+                "x-api-key": uploadApiKey,
+              },
+              body: fd,
+            }
+          )
+            .then((r) => r.json())
+            .then((res) => {
+              document.getElementById('json').innerHTML = JSON.stringify(res)
+            });
+        };
+      };
+    </script>
+    <title>test</title>
+  </head>
+  <body>
+    <div style="font-size: 20px">
+      <a href="/">识别</a>
+      |
+      <a href="/upload.html">录入</a>
+    </div>
+    <video id="live" width="376" height="450" style="display: none"></video>
+    <canvas id="canvas" width="376" height="450" style="display: none"></canvas>
+    <canvas
+      id="canvas2"
+      width="376"
+      height="450"
+      style="background: black"
+    ></canvas>
+    <button
+      onclick="start()"
+      style="
+        display: block;
+        width: 100%;
+        height: 40px;
+        margin-top: 10px;
+        font-size: 20px;
+        background-color: aqua;
+      "
+    >
+      开始录入
+    </button>
+
+    <input
+      type="text"
+      placeholder="姓名"
+      id="input"
+      style="height: 40px; margin-top: 30px"
+    />
+    <button
+      onclick="upload()"
+      style="
+        width: 50%;
+        height: 40px;
+        margin-top: 10px;
+        font-size: 20px;
+        background-color: aqua;
+      "
+    >
+      提交
+    </button>
+    <label id="json"></label>
+  </body>
+</html>
